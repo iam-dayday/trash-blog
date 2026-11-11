@@ -76,6 +76,12 @@ function resize() {
 let letters = [];
 let grab = null;
 function measureNav() {
+  const basket = geometry();
+  const rimTop = basket.y + .0465 * basket.size;
+  const rule = document.querySelector('nav').getBoundingClientRect().bottom;
+  document.querySelector('#reader').style.setProperty('--thought-center', ((rule + rimTop) / 2) + 'px');
+
+  measurePill();
   letters = [];
   const range = document.createRange();
   for (const link of document.querySelectorAll('nav a')) {
@@ -127,7 +133,29 @@ function segment(p,x1,y1,x2,y2) {
   const x=p.x-x1-dx*t,y=p.y-y1-dy*t,d=Math.hypot(x,y);
   if(d<p.r+1 && d>.00001)contact(p,x/d,y/d,p.r+1-d);
 }
+const reader = document.querySelector('#reader');
+let pill = null;
+function measurePill() {
+  const r = reader.getBoundingClientRect();
+  pill = reader.textContent && r.width && r.height ? r : null;
+}
+new ResizeObserver(measurePill).observe(reader);
+function collidePill(p) {
+  if (!pill) return;
+  const radius = Math.min(pill.width, pill.height) / 2;
+  const clamp = (v, low, high) => Math.max(low, Math.min(high, v));
+  const dx = p.x - clamp(p.x, pill.left + radius, pill.right - radius);
+  const dy = p.y - clamp(p.y, pill.top + radius, pill.bottom - radius);
+  const distance = Math.hypot(dx, dy);
+  const depth = p.r + radius - distance;
+  if (depth <= 0) return;
+  if (distance > 0) contact(p, dx / distance, dy / distance, depth);
+  else if (pill.width >= pill.height) contact(p, 0, p.vy < 0 ? 1 : -1, depth);
+  else contact(p, p.vx < 0 ? 1 : -1, 0, depth);
+}
+
 function constrain(p,b) {
+  collidePill(p);
   if(p.x<p.r)contact(p,1,0,p.r-p.x);
   if(p.x>W-p.r)contact(p,-1,0,p.x-W+p.r);
   if(p.y<p.r)contact(p,0,1,p.r-p.y);
@@ -244,17 +272,35 @@ async function startArt(){
   if(paused)for(let i=0;i<1200;i++)step(1/120);
   draw();new ResizeObserver(resize).observe(canvas);
 }
-function select(i){if(!balls[i])return;selected=i;const p=balls[i];if(!paused){p.vy=-490;p.vx+=(random(Date.now())-.5)*240;p.spin=(random(Date.now()+3)-.5)*14}document.querySelector('#reader').textContent=p.entry.text;draw()}
+function select(i){if(!balls[i])return;selected=i;const p=balls[i];if(!paused){p.vy=-490;p.vx+=(random(Date.now())-.5)*240;p.spin=(random(Date.now()+3)-.5)*14}document.querySelector('#reader').textContent=p.entry.text;measurePill();draw()}
 function pick(x,y) {
   for(let i=balls.length-1;i>=0;i--){
     const p=balls[i];
     if(Math.hypot(x-p.x,y-p.y)<=p.r+2)return p;
   }
 }
+let blankPress = null;
+function blankAt(x,y) {
+  if (pick(x,y)) return false;
+  if (pill && x>=pill.left && x<=pill.right && y>=pill.top && y<=pill.bottom) return false;
+  const g=geometry(), u=(x-g.left)/g.size, v=(y-g.y)/g.size;
+  // The closed lower outline and the elliptical opening cover the bin, including its mesh.
+  if (((u-.51)/.39)**2 + ((v-.16)/.115)**2 <= 1) return false;
+  let inside=false;
+  for(let i=0,j=outerInk.length-1;i<outerInk.length;j=i++){
+    const [a,b]=outerInk[i],[c,d]=outerInk[j];
+    if ((b>v)!==(d>v) && u<(c-a)*(v-b)/(d-b)+a) inside=!inside;
+  }
+  return !inside;
+}
 canvas.addEventListener('pointerdown',event=>{
   if(grab || event.button!==0)return;
   const paper=pick(event.clientX,event.clientY);
-  if(!paper)return;
+  if(!paper){
+    if(event.isPrimary && blankAt(event.clientX,event.clientY))blankPress={id:event.pointerId,x:event.clientX,y:event.clientY};
+    return;
+  }
+  blankPress=null;
   grab={paper,id:event.pointerId,startX:event.clientX,startY:event.clientY,x:paper.x,y:paper.y,
     offsetX:paper.x-event.clientX,offsetY:paper.y-event.clientY,dragging:false,samples:[]};
   canvas.setPointerCapture(event.pointerId);
@@ -269,6 +315,11 @@ function track(event){
 }
 canvas.addEventListener('pointermove',track);
 canvas.addEventListener('pointerup',event=>{
+  if(blankPress?.id===event.pointerId){
+    const start=blankPress;blankPress=null;
+    if(Math.hypot(event.clientX-start.x,event.clientY-start.y)<=4 && blankAt(event.clientX,event.clientY)){reader.textContent='';pill=null;selected=-1;}
+    return;
+  }
   if(!grab || grab.id!==event.pointerId)return;
   track(event);
   const {paper,dragging,samples}=grab;grab=null;
@@ -278,6 +329,7 @@ canvas.addEventListener('pointerup',event=>{
   paper.vy=dt>.008?(last.y-first.y)/dt:0;
 });
 for(const name of ['pointercancel','lostpointercapture'])canvas.addEventListener(name,e=>{
+  if(blankPress?.id===e.pointerId)blankPress=null;
   if(grab?.id===e.pointerId)grab=null;
 });
 canvas.addEventListener('keydown', event => {
