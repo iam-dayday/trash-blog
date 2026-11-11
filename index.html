@@ -4,8 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>垃圾话</title>
-<style>
-* { box-sizing: border-box; }
+<style>* { box-sizing: border-box; }
 body {
   margin: 0 auto;
   width: min(88%, 1120px);
@@ -88,9 +87,6 @@ nav a { pointer-events:auto; }
 #reader:empty { display: none; }
 
 body { font-size: calc(1rem - 4px); }
-
-</style>
-<style>
 #writing{max-width:42rem;margin:2rem auto 10vh;line-height:1.85;overflow-wrap:anywhere}
 #writing article{padding:1.6em 0;border-top:1px solid #cecac0;margin-right:3.5rem}
 #writing article p{white-space:pre-wrap}#writing time{font-size:calc(.85rem - 4px)}
@@ -99,7 +95,12 @@ body { font-size: calc(1rem - 4px); }
 #writing aside input{writing-mode:vertical-lr;height:20vh;accent-color:#383632}
 #writing aside output{font-size:8px}
 
-#writing h2 {font-size:calc(1.5rem - 4px)}
+#writing h2 {font-size:calc(1.5rem - 4px)}@media (max-width:760px), (max-height:520px) and (max-width:960px) {
+  nav { margin-top:max(env(safe-area-inset-top), clamp(16px,5vh,45px)); }
+}
+nav a.touch-pill { color:white; }
+nav a.touch-pill::before { transform:scale(1); transition:transform 330ms cubic-bezier(.2,1.65,.38,1); }
+@media(prefers-reduced-motion:reduce){nav a.touch-pill::before{transition:none}}
 </style>
 </head>
 <body>
@@ -116,8 +117,7 @@ body { font-size: calc(1rem - 4px); }
   <section id="writing" aria-live="polite"></section>
 </main>
 <script src="art.js"></script>
-<script>
-let entries = [];
+<script>let entries = [];
 // Each nonempty paragraph is one published thought.
 function parseThoughts(source) {
   return source.replace(/^\uFEFF/, '').trim().split(/\r?\n[ \t]*\r?\n/).map(text=>text.trim())
@@ -131,8 +131,9 @@ let queue = [], untilDrop = 0;
 
 // Both bin layers retain the registration of the original square canvas.
 function geometry() {
-  const size = Math.min(W * .88, H * .49, 460);
-  return {size, left:(W-size)/2, y:H*.88-size+.01425*size};
+  const compact = W <= 760 || (H <= 520 && W <= 960);
+  const size = Math.min(W * .88, H * .49, 460) * (compact ? .8 : 1);
+  return {size, paperRatio:compact ? .9/.8 : 1, left:(W-size)/2, y:H*.88-size+.01425*size};
 }
 // Open outline sampled from the visible outer ink of bin-front.png.
 const outerInk = [[0.1255,0.16],[0.133,0.208],[0.1465,0.2555],[0.1605,0.3035],[0.1655,0.3515],[0.17,0.3995],[0.177,0.447],[0.183,0.495],[0.1885,0.543],[0.1935,0.5905],[0.2,0.6385],[0.206,0.6865],[0.2115,0.7345],[0.2175,0.782],[0.2205,0.83],[0.2205,0.8305],[0.235,0.87],[0.2495,0.888],[0.264,0.8995],[0.2785,0.9095],[0.293,0.92],[0.3075,0.928],[0.3225,0.934],[0.337,0.941],[0.3515,0.946],[0.366,0.95],[0.3805,0.9545],[0.395,0.958],[0.4095,0.9605],[0.424,0.9625],[0.4385,0.965],[0.453,0.9675],[0.4675,0.968],[0.482,0.969],[0.4965,0.9705],[0.5115,0.9705],[0.526,0.9715],[0.5405,0.97],[0.555,0.97],[0.5695,0.9695],[0.584,0.9665],[0.5985,0.966],[0.613,0.963],[0.6275,0.96],[0.642,0.957],[0.6565,0.953],[0.671,0.948],[0.6855,0.944],[0.7,0.938],[0.715,0.931],[0.7295,0.9235],[0.744,0.914],[0.7585,0.9045],[0.773,0.8925],[0.7875,0.8715],[0.802,0.849],[0.802,0.83],[0.8085,0.782],[0.8145,0.7345],[0.8195,0.6865],[0.8245,0.6385],[0.831,0.5905],[0.836,0.543],[0.842,0.495],[0.8465,0.447],[0.8535,0.3995],[0.8585,0.3515],[0.8655,0.3035],[0.8775,0.2555],[0.885,0.208],[0.8945,0.16]];
@@ -171,7 +172,7 @@ function reset() {
 }
 function spawn() {
   const p=queue.pop(), b=bounds();
-  p.r=b.bottomHalf*(.28+Math.random()*.076);
+  p.r=b.bottomHalf*(.28+Math.random()*.076)*geometry().paperRatio;
   p.x=b.center+(Math.random()*2-1)*(b.topHalf-p.r)*.88;
   p.y=b.top-p.r-25; p.vx=(Math.random()-.5)*55; p.vy=25+Math.random()*65;
   balls.push(p);
@@ -184,7 +185,7 @@ function resize() {
   const next=geometry(), scale=next.size/old.size;
   for(const p of balls){
     p.x=next.left+(p.x-old.left)*scale;
-    p.y=next.y+(p.y-old.y)*scale; p.r*=scale;
+    p.y=next.y+(p.y-old.y)*scale; p.r*=scale*next.paperRatio/old.paperRatio;
   }
   const d=Math.min(devicePixelRatio||1,4);
   canvas.width=Math.round(W*d);canvas.height=Math.round(H*d);
@@ -457,6 +458,22 @@ canvas.addEventListener('keydown', event => {
   const direction = event.key === 'ArrowLeft' ? -1 : 1;
   select((selected + direction + balls.length) % balls.length);
 });
+const navigation = document.querySelector('nav');
+let touchTimer;
+function touchFeedback(event) {
+  const link = event.target.closest('a');
+  if (!link || (event.pointerType === 'mouse' && W > 760)) return;
+  clearTimeout(touchTimer);
+  for (const item of navigation.querySelectorAll('a')) item.classList.remove('touch-pill');
+  void link.offsetWidth;
+  link.classList.add('touch-pill');
+  touchTimer = setTimeout(() => link.classList.remove('touch-pill'), 530);
+}
+navigation.addEventListener('pointerdown', touchFeedback);
+navigation.addEventListener('pointercancel', () => {
+  clearTimeout(touchTimer);
+  navigation.querySelector('.touch-pill')?.classList.remove('touch-pill');
+});
 function navigate() {
   const links = [...document.querySelectorAll('nav a')];
   const active = links.find(link => link.hash === location.hash) || links[0];
@@ -479,7 +496,6 @@ navigate();
 function frame(t){const dt=Math.min((t-last)/1000||0,.05);last=t;if(artwork.length&&(!paused||grab?.dragging)&&!document.hidden&&canvas.offsetWidth){acc+=dt;while(acc>=1/120){step(1/120);acc-=1/120}draw()}requestAnimationFrame(frame)}requestAnimationFrame(frame);
 
 startArt().catch(()=>{document.querySelector('#reader').textContent='内容未能加载，请通过网站地址打开并刷新。'});
-
 </script>
 <script src="writing.js"></script>
 </body></html>
