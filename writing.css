@@ -1,0 +1,7 @@
+#writing{max-width:42rem;margin:2rem auto 10vh;line-height:1.85;overflow-wrap:anywhere}
+#writing article{padding:1.6em 0;border-top:1px solid #cecac0;margin-right:3.5rem}
+#writing article p{white-space:pre-wrap}#writing time{font-size:.85rem}
+#writing aside{position:fixed;right:2vw;top:35vh;display:flex;align-items:center;flex-direction:column;background:#fcfaf4}
+#writing aside button{font:inherit;border:0;background:none;cursor:pointer}
+#writing aside input{writing-mode:vertical-lr;height:20vh;accent-color:#383632}
+#writing aside output{font-size:12px}
